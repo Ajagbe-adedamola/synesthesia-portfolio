@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Synesthesia — Music → Art</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="shell-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>Synesthesia</h1>
+        <p class="tagline">Put in a song, get back a picture.</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button id="spotifyBtn" class="btn btn-ghost" type="button">
+        <span class="icon icon-spotify" aria-hidden="true"></span>
+        Spotify
+      </button>
+      <button id="exportBtn" class="btn" type="button" disabled>Export art</button>
+      <button id="clearBtn" class="btn btn-ghost" type="button" disabled>Clear</button>
+    </div>
+  </header>
+
+  <main class="shell-main">
+    <section class="dropzone" id="dropzone">
+      <div class="dropzone-inner">
+        <span class="dropzone-icon" aria-hidden="true"></span>
+        <div>
+          <h2>Drop a song or album here</h2>
+          <p class="muted">MP3, WAV, FLAC, OGG, M4A — one file or many.</p>
+        </div>
+        <label class="btn btn-primary" for="fileInput">Choose files</label>
+        <input id="fileInput" type="file" accept="audio/*" multiple hidden />
+        <div class="source-switch">
+          <span class="source-chip source-chip-active" data-source="local">Local file</span>
+          <span class="source-chip" data-source="spotify">Spotify</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="stage" id="stageSection" hidden>
+      <div class="stage-head">
+        <div class="track-meta" id="trackMeta">
+          <span class="track-name" id="trackName"></span>
+          <span class="track-sub" id="trackSub"></span>
+          <span class="track-status" id="trackStatus" aria-live="polite"></span>
+        </div>
+        <div class="stage-controls">
+          <button id="playBtn" class="icon-btn" type="button" aria-label="Play / pause">
+            <span class="icon icon-play" aria-hidden="true"></span>
+          </button>
+          <div class="progress-wrap">
+            <input id="seekBar" type="range" min="0" max="100" value="0" step="0.1" class="progress" aria-label="Seek" />
+          </div>
+          <span class="time" id="timeDisplay">0:00 / 0:00</span>
+        </div>
+      </div>
+
+      <div class="canvas-wrap">
+        <canvas id="canvas" class="canvas" width="1200" height="800"></canvas>
+        <div class="canvas-overlay" id="canvasOverlay">
+          <div>
+            <strong id="overlayTitle">Listening…</strong>
+            <p class="muted" id="overlaySub">The artwork is forming as the music plays.</p>
+          </div>
+        </div>
+      </div>
+
+      <section class="palette" id="paletteSection">
+        <div class="palette-label">Color signature</div>
+        <div class="palette-swatches" id="paletteSwatches"></div>
+      </section>
+      <section class="spotify-source" id="spotifySource" hidden>
+        <div class="spotify-status" id="spotifyStatus"></div>
+        <div class="spotify-search">
+          <input id="spotifyQuery" type="text" placeholder="Search Spotify for a song, artist, or album…" class="spotify-query" autocomplete="off" />
+          <button id="spotifySearchBtn" class="btn btn-primary" type="button">Search</button>
+        </div>
+        <div class="spotify-results" id="spotifyResults"></div>
+      </section>
+
+      <section class="stats" id="statsSection">
+        <div class="stat"><span class="stat-value" id="statBpm">—</span><span class="stat-label">pulse</span></div>
+        <div class="stat"><span class="stat-value" id="statEnergy">—</span><span class="stat-label">energy</span></div>
+        <div class="stat"><span class="stat-value" id="statBrightness">—</span><span class="stat-label">brightness</span></div>
+        <div class="stat"><span class="stat-value" id="statWarmth">—</span><span class="stat-label">warmth</span></div>
+      </section>
+    </section>
+
+    <section class="gallery-section" id="gallerySection" hidden>
+      <h2 class="gallery-title">Album art</h2>
+      <p class="muted gallery-sub">Each track in the album becomes its own piece in a sequence.</p>
+      <div class="gallery" id="gallery"></div>
+    </section>
+  </main>
+
+  <footer class="shell-footer">
+    <p>Made with the Web Audio API &amp; Canvas — everything runs in your browser.</p>
+  </footer>
+
+  <!-- Spotify config: set your client ID and redirect URI here. -->
+  <!-- Get a client ID from https://developer.spotify.com/dashboard -->
+  <!-- Add a redirect URI (e.g. http://localhost:3000/spotify-callback) to the app's settings. -->
+  <script>
+    // Edit these two values to enable Spotify search + playback.
+    window.SPOTIFY_CLIENT_ID = window.SPOTIFY_CLIENT_ID || "";
+    window.SPOTIFY_REDIRECT_URI = window.SPOTIFY_REDIRECT_URI || "http://localhost:3000/spotify-callback";
+  </script>
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

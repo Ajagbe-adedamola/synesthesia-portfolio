@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# tooling / local state
+.freebuff/
+*.log
+
+# screenshots used while verifying the build
+image-studio/*.png
+
+# secrets
+.env
+.env.*
+.dev.vars
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
