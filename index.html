@@ -70,6 +70,16 @@
         </div>
       </div>
 
+      <div class="layer-bar" id="layerBar">
+        <span class="layer-label">Layers</span>
+        <button class="layer-chip is-on" data-layer="type" type="button">Typography</button>
+        <button class="layer-chip is-on" data-layer="shapes" type="button">Shapes</button>
+        <button class="layer-chip is-on" data-layer="patterns" type="button">Patterns</button>
+        <button class="layer-chip" data-layer="image" type="button">Distorted image</button>
+        <label class="layer-chip layer-upload" for="imageInput">Use a photo</label>
+        <input id="imageInput" type="file" accept="image/*" hidden />
+      </div>
+
       <section class="palette" id="paletteSection">
         <div class="palette-label">Color signature</div>
         <div class="palette-swatches" id="paletteSwatches"></div>
@@ -99,7 +109,7 @@
   </main>
 
   <footer class="shell-footer">
-    <p>Made with the Web Audio API &amp; Canvas — everything runs in your browser.</p>
+    <p>Type, shapes, patterns and distorted images — all driven by the Web Audio API. Everything runs in your browser.</p>
   </footer>
 
   <!-- Spotify config: set your client ID and redirect URI here. -->

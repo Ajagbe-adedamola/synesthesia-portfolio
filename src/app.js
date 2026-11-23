@@ -42,6 +42,8 @@ const statBrightness = document.getElementById("statBrightness");
 const statWarmth = document.getElementById("statWarmth");
 const gallerySection = document.getElementById("gallerySection");
 const galleryEl = document.getElementById("gallery");
+const layerChips = document.querySelectorAll(".layer-chip[data-layer]");
+const imageInput = document.getElementById("imageInput");
 
 // ---- Spotify UI refs ----
 
@@ -548,6 +550,7 @@ async function openTrack(index) {
   const seed = hashString(name + "|" + entry.file.lastModified);
   Renderer.reseed(seed);
   Renderer.setFeatures(features);
+  Renderer.setText(stripExtension(name));
   Renderer.clear();
 
   AudioPipeline.prepareBuffer(entry.buffer);
@@ -610,6 +613,48 @@ playBtn.addEventListener("click", () => {
 
 seekBar.addEventListener("input", (e) => {
   AudioPipeline.seek(parseFloat(e.target.value) / 100);
+});
+
+// ---- Visual layers ----
+
+layerChips.forEach((chip) => {
+  chip.addEventListener("click", () => {
+    const key = chip.getAttribute("data-layer");
+    const on = !chip.classList.contains("is-on");
+
+    // Asking for the image layer without a photo is a prompt, not a toggle.
+    if (key === "image" && on && !Renderer.hasImage()) {
+      imageInput.click();
+      return;
+    }
+
+    chip.classList.toggle("is-on", on);
+    Renderer.setLayers({ [key]: on });
+  });
+});
+
+imageInput.addEventListener("change", () => {
+  const file = imageInput.files && imageInput.files[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    Renderer.setImage(img);
+    Renderer.reseed(hashString(file.name + "|" + file.lastModified));
+    Renderer.setLayers({ image: true });
+    const chip = document.querySelector('.layer-chip[data-layer="image"]');
+    if (chip) {
+      chip.classList.add("is-on");
+      chip.textContent = "Distorted image";
+    }
+  };
+  img.onerror = () => {
+    URL.revokeObjectURL(url);
+    trackStatus.textContent = "Couldn't read that image";
+    trackStatus.classList.add("warn");
+  };
+  img.src = url;
 });
 
 // ---- Export ----

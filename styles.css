@@ -313,6 +313,47 @@ track-status.ok { color: var(--good); }
 
 /* Palette + stats */
 
+/* Visual layers */
+
+.layer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.layer-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.layer-chip {
+  appearance: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.layer-chip:hover { color: var(--text); border-color: #3a3a48; }
+
+.layer-chip.is-on {
+  background: rgba(255, 77, 141, 0.14);
+  border-color: var(--accent);
+  color: #ffd0e0;
+}
+
+.layer-upload { border-style: dashed; }
+
 .palette {
   display: flex;
   align-items: center;

@@ -76,6 +76,22 @@ const Renderer = (() => {
   /** Shared random with a seed so each track is reproducible. */
   let rng = Math.random;
 
+  /** Cached noise plate for the film-grain pass. */
+  let grainTile = null;
+
+  /**
+   * Visual layers. The brief asks for typography, abstract shapes, distorted
+   * images, animated patterns and dynamic composition; each behaviour lives in
+   * its own layer so a piece can be composed from any combination of them.
+   */
+  const layers = { type: true, shapes: true, patterns: true, image: false };
+
+  /** Word the typography layer animates (usually the track title). */
+  let artworkText = "SYNESTHESIA";
+
+  /** Optional source image for the distortion layer. */
+  let sourceImage = null;
+
   function setCallbacks({ onPalette: op, onStats: os, onStart: ost }) {
     if (op) onPalette = op;
     if (os) onStats = os;
@@ -206,20 +222,32 @@ const Renderer = (() => {
     } else {
       state.pulse *= 0.92;
     }
-    paintPulse(ctx, w, h, state.pulse);
+    // Layer 1: distorted source image (when one has been added).
+    if (layers.image) paintImageLayer(ctx, w, h);
 
-    // Update and draw particle system (always a few particles; onsets spawn bursts).
-    updateParticles();
-    drawParticles(ctx, w, h);
+    // Layer 2: animated geometric patterns.
+    if (layers.patterns) paintPatterns(ctx, w, h);
 
-    // Blooms: slow glowing color fields from bass.
-    updateBlooms(ctx, w, h);
+    // Layer 3: abstract shapes — pulse, particles, blooms, strokes, washes.
+    if (layers.shapes) {
+      paintPulse(ctx, w, h, state.pulse);
 
-    // Strokes: fine line work from treble/brightness.
-    updateStrokes(ctx, w, h);
+      // Update and draw particle system (always a few particles; onsets spawn bursts).
+      updateParticles();
+      drawParticles(ctx, w, h);
 
-    // Occasional background drift: slow color-field washes.
-    paintWash(ctx, w, h);
+      // Blooms: slow glowing color fields from bass.
+      updateBlooms(ctx, w, h);
+
+      // Strokes: fine line work from treble/brightness.
+      updateStrokes(ctx, w, h);
+
+      // Occasional background drift: slow color-field washes.
+      paintWash(ctx, w, h);
+    }
+
+    // Layer 4: moving typography.
+    if (layers.type) paintTypography(ctx, w, h);
 
     // Subtle grain to feel like film/ink.
     paintGrain(ctx, w, h, clamp01(audio.brightness || features.brightness));
@@ -501,24 +529,201 @@ const Renderer = (() => {
     ctx.globalAlpha = 1;
   }
 
-  function paintGrain(ctx, w, h, brightness) {
-    // Subtle film grain; more visible on bright pieces.
-    const density = 0.012 + brightness * 0.025;
-    ctx.globalCompositeOperation = "overlay";
-    ctx.globalAlpha = 0.04 + brightness * 0.05;
-
-    // Only paint a small random subset each frame for performance + flicker.
-    const span = Math.floor(w * h * density);
-    for (let i = 0; i < span; i++) {
-      const x = Math.floor(rng() * w);
-      const y = Math.floor(rng() * h);
-      const v = rng();
-      const bright = (v - 0.5) * 22;
-      ctx.fillStyle = `rgba(255,255,255,${bright > 0 ? bright / 255 : 0})`;
-      ctx.fillRect(x, y, 1, 1);
+  /**
+   * Build the grain plate once. Drawing ~30k individual 1px rects per frame was
+   * the single most expensive thing in the loop; one cached plate that is
+   * re-positioned each frame gives the same flickering film texture for a
+   * fraction of the cost.
+   */
+  function makeGrainTile(size = 180) {
+    const c = document.createElement("canvas");
+    c.width = size;
+    c.height = size;
+    const g = c.getContext("2d");
+    const img = g.createImageData(size, size);
+    const d = img.data;
+    for (let i = 0; i < size * size; i++) {
+      const p = i * 4;
+      d[p] = 255;
+      d[p + 1] = 255;
+      d[p + 2] = 255;
+      d[p + 3] = Math.random() > 0.7 ? 12 + ((Math.random() * 26) | 0) : 0;
     }
+    g.putImageData(img, 0, 0);
+    return c;
+  }
+
+  function paintGrain(ctx, w, h, brightness) {
+    if (!grainTile) grainTile = makeGrainTile();
+    const pattern = ctx.createPattern(grainTile, "repeat");
+    if (!pattern) return;
+
+    ctx.save();
+    // Subtle film grain; more visible on bright pieces.
+    ctx.globalCompositeOperation = "overlay";
+    ctx.globalAlpha = 0.05 + brightness * 0.1;
+
+    // Jump the plate each frame so the grain crawls like film.
+    ctx.translate(
+      -Math.floor(Math.random() * grainTile.width),
+      -Math.floor(Math.random() * grainTile.height)
+    );
+    ctx.fillStyle = pattern;
+    ctx.fillRect(0, 0, w + grainTile.width, h + grainTile.height);
+    ctx.restore();
+  }
+
+  // ---- Layer: animated patterns ----
+
+  /**
+   * Concentric rings and a dot lattice. Ring count follows treble, ring weight
+   * and the slow camera zoom follow bass and onsets, so the pattern breathes
+   * with the beat instead of looping on its own clock.
+   */
+  function paintPatterns(ctx, w, h) {
+    const bass = clamp01(audio.bass || 0);
+    const treble = clamp01(audio.treble || 0);
+    const energy = clamp01(audio.energy || features.energy);
+    const onset = clamp01(audio.onsets || 0);
+
+    ctx.save();
+    // Dynamic composition: the whole field drifts and tilts with energy.
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate(Math.sin(state.t * 0.13) * 0.06 * (0.3 + energy));
+    const zoom = 1 + bass * 0.06 + onset * 0.05;
+    ctx.scale(zoom, zoom);
+    ctx.translate(-w / 2, -h / 2);
+    ctx.globalCompositeOperation = "screen";
+
+    const rings = 10 + Math.floor(treble * 26);
+    const gap = (Math.hypot(w, h) * 0.6) / rings;
+    for (let i = 0; i < rings; i++) {
+      const [hue, sat, lig] = paletteSample(i);
+      const wob = Math.sin(state.t * 1.2 + i * 0.4) * gap * 0.35;
+      const r = (i + 0.5) * gap + wob + bass * gap * 0.6;
+      ctx.beginPath();
+      ctx.arc(w / 2, h / 2, Math.max(1, r), 0, Math.PI * 2);
+      ctx.lineWidth = 0.5 + bass * 2.5 + onset * 2;
+      ctx.strokeStyle = `hsla(${hue},${sat}%,${lig}%,${0.06 + onset * 0.18 + energy * 0.05})`;
+      ctx.stroke();
+    }
+
+    // A sparse dot lattice keeps the pattern from reading as pure decoration.
+    const step = 46 - treble * 18;
+    ctx.fillStyle = `hsla(${state.hueBase},60%,72%,${0.05 + onset * 0.1})`;
+    for (let y = 0; y < h; y += step) {
+      for (let x = 0; x < w; x += step) {
+        const d = Math.hypot(x - w / 2, y - h / 2);
+        const r = 1.2 + Math.sin(d * 0.02 - state.t * 2) * 1.4 + bass * 2;
+        if (r <= 0.2) continue;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  // ---- Layer: moving typography ----
+
+  /**
+   * The track title, set large and set free: each glyph rises on its own phase
+   * (treble widens the wobble), the whole word swells with bass and jumps on
+   * onsets, and a ghost line prints behind it for a mis-registered feel.
+   */
+  function paintTypography(ctx, w, h) {
+    const text = String(artworkText || "").toUpperCase().slice(0, 28).trim();
+    if (!text) return;
+
+    const bass = clamp01(audio.bass || 0);
+    const treble = clamp01(audio.treble || 0);
+    const energy = clamp01(audio.energy || features.energy);
+    const bright = clamp01(audio.brightness || features.brightness);
+
+    let size = Math.min((w * 1.55) / Math.max(5, text.length), h * 0.19);
+    size *= 0.92 + bass * 0.32 + state.pulse * 0.22;
+
+    ctx.save();
+    ctx.font = `900 ${Math.max(10, size)}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.globalCompositeOperation = "screen";
+
+    const chars = Array.from(text);
+    const widths = chars.map((c) => ctx.measureText(c).width);
+    const total = widths.reduce((a, b) => a + b, 0);
+    const startX = w / 2 - total / 2;
+    const baseY = h * (0.5 + Math.sin(state.t * 0.35) * 0.035);
+
+    let x = startX;
+    for (let i = 0; i < chars.length; i++) {
+      const cw = widths[i];
+      const rise = Math.sin(state.t * 1.4 + i * 0.45) * size * (0.06 + treble * 0.22);
+      const fall = Math.cos(state.t * 0.9 + i * 0.3) * size * 0.05;
+      const [hue, sat, lig] = paletteSample(i);
+      ctx.fillStyle = `hsla(${hue},${sat}%,${Math.min(92, lig + 18)}%,${0.6 + bright * 0.3})`;
+      ctx.fillText(chars[i], x + cw / 2, baseY + rise - fall);
+      x += cw;
+    }
+
+    // Ghost pass, offset and out of phase — the print-registration echo.
+    if (energy > 0.22) {
+      ctx.globalAlpha = 0.16 + state.pulse * 0.24;
+      ctx.fillStyle = `hsla(${(state.hueBase + 180) % 360},70%,72%,0.5)`;
+      let gx = startX + Math.sin(state.t * 0.8) * 10;
+      for (let i = 0; i < chars.length; i++) {
+        ctx.fillText(
+          chars[i],
+          gx + widths[i] / 2,
+          baseY + Math.sin(state.t * 1.1 + i * 0.5) * size * 0.5
+        );
+        gx += widths[i];
+      }
+    }
+
+    ctx.restore();
+  }
+
+  // ---- Layer: distorted image ----
+
+  /**
+   * The loaded photo, torn into horizontal slices whose offset is driven by
+   * bass and energy, with a slow zoom pulse on onsets. Low-frequency content
+   * literally bends the picture.
+   */
+  function paintImageLayer(ctx, w, h) {
+    if (!sourceImage) return;
+
+    const bass = clamp01(audio.bass || 0);
+    const energy = clamp01(audio.energy || features.energy);
+    const bright = clamp01(audio.brightness || features.brightness);
+
+    const fit = Math.max(w / sourceImage.width, h / sourceImage.height);
+    const zoom = fit * (1 + bass * 0.08 + state.pulse * 0.05);
+    const dw = sourceImage.width * zoom;
+    const dh = sourceImage.height * zoom;
+    const dx = (w - dw) / 2;
+    const dy = (h - dh) / 2;
+
+    const slices = 54;
+    const sh = sourceImage.height / slices;
+    const amp = (2 + bass * 30) * (0.4 + energy);
+
+    ctx.save();
     ctx.globalCompositeOperation = "source-over";
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = 0.55 + bright * 0.35;
+    for (let i = 0; i < slices; i++) {
+      const off =
+        Math.sin(state.t * 2 + i * 0.32) * amp +
+        Math.sin(state.t * 0.6 + i * 0.9) * amp * 0.45;
+      ctx.drawImage(
+        sourceImage,
+        0, i * sh, sourceImage.width, sh,
+        dx + off, dy + (dh / slices) * i, dw, dh / slices + 1
+      );
+    }
+    ctx.restore();
   }
 
   // ---- Utilities ----
@@ -605,12 +810,59 @@ const Renderer = (() => {
     return link.href;
   }
 
+  function setLayers(next) {
+    if (!next) return;
+    for (const key of Object.keys(layers)) {
+      if (typeof next[key] === "boolean") layers[key] = next[key];
+    }
+  }
+
+  function setText(text) {
+    const t = String(text || "").trim();
+    artworkText = t || "SYNESTHESIA";
+  }
+
+  /** Accepts an <img> or a canvas; stored at a sane size for slicing. */
+  function setImage(imgOrCanvas) {
+    if (!imgOrCanvas) {
+      sourceImage = null;
+      return;
+    }
+    const iw = imgOrCanvas.naturalWidth || imgOrCanvas.width;
+    const ih = imgOrCanvas.naturalHeight || imgOrCanvas.height;
+    if (!iw || !ih) {
+      sourceImage = null;
+      return;
+    }
+    const scale = Math.min(1, 1600 / iw);
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(iw * scale));
+    c.height = Math.max(1, Math.round(ih * scale));
+    const g = c.getContext("2d");
+    g.imageSmoothingQuality = "high";
+    g.drawImage(imgOrCanvas, 0, 0, c.width, c.height);
+    sourceImage = c;
+  }
+
+  function hasImage() {
+    return !!sourceImage;
+  }
+
+  function getLayers() {
+    return Object.assign({}, layers);
+  }
+
   return {
     attach,
     clear,
     setCallbacks,
     setAudioFrame,
     setFeatures,
+    setLayers,
+    getLayers,
+    setText,
+    setImage,
+    hasImage,
     reseed,
     start,
     exportImage,
